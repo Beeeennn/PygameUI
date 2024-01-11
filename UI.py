@@ -372,15 +372,70 @@ class ScrollingTextbox:
         text+= " "
         text = (f"{user.nickname}: {text}")
         return text
+        
+class Button():
+    # Initialize button with toggle, position, images for different states, scale, selection state, and screen
+    def __init__(self, x, y, image, image_hover, image_selected, scale, selected, screen):
+        # Screen dimensions and scaling factors
+        self.sheight = screen.get_height()
+        self.swidth = screen.get_width()
+        self.domsc = min(self.sheight, self.swidth)
 
-class Messages:
-    def __init__(self,font,font_size,x,y,width,height,image,text_col,back_col,reciever,user,screen):
+        # Scale images for button states
+        self.width = image.get_width()
+        self.height = image.get_height()
+        self.image = pygame.transform.scale(image, (int(self.width * scale * self.domsc / 100000), int(self.height * scale * self.domsc / 100000)))
+        self.image_hover = pygame.transform.scale(image_hover, (int(self.width * scale * self.domsc / 100000), int(self.height * scale * self.domsc / 100000)))
+        self.image_select = pygame.transform.scale(image_selected, (int(self.width * scale * self.domsc / 100000), int(self.height * scale * self.domsc / 100000)))
 
+        # Adjust size and position
+        self.width = self.image.get_width()
+        self.height = self.image.get_height()
+        self.rect = self.image.get_rect()
+        self.rect.topleft = (((x * self.swidth / 1000) - (self.width / 2)), ((y * self.sheight / 1000) - (self.height / 2)))
+
+        # Button state variables
+        self.clicked = False
+        self.selected = selected
+
+    # Draw button on screen and handle click events
+    def draw(self, surface):
+        image = self.image
+        action = False
+        pos = pygame.mouse.get_pos()
+
+        # Change image on hover and handle click
+        if self.rect.collidepoint(pos):
+            image = self.image_hover
+            if pygame.mouse.get_pressed()[0] == 1 and not self.clicked:
+                self.clicked = True
+                action = True
+                self.selected = True
+
+        # Change image if button is selected
+        if self.selected:
+            image = self.image_select
+
+        # Reset click state when mouse button is released
+        if pygame.mouse.get_pressed()[0] == 0:
+            self.clicked = False
+
+        # Draw button image
+        surface.blit(image, (self.rect.x, self.rect.y))
+        return action
+
+    # Deselect the button
+    def deselect(self):
+        self.selected = False
+
+class FileDisplay:
+    # FileDisplay class for showing file content or messages
+    def __init__(self, font, font_size, x, y, width, height, text_col, back_col, text, screen):
+        # Initialize file display properties
         self.swidth = screen.get_width()
         self.sheight = screen.get_height()
         self.height = height
         self.width = width
-        self.image = pygame.transform.scale(image,(int(width*self.swidth/1000),int(height*self.sheight/1000)))
         self.base_font = pygame.font.Font(font,font_size*self.sheight//1000)
         self.rect=pygame.Rect((x-(width/2))*self.swidth/1000,(y-(height/2))*self.sheight/1000,width*self.swidth/1000,height*self.sheight/1000)
         self.outrect=pygame.Rect(((x-(width/2))*self.swidth/1000)-(self.base_font.get_height()),((y-(height/2))*self.sheight/1000)-(self.base_font.get_height()),(width*self.swidth/1000)+(2*self.base_font.get_height()),(height*self.sheight/1000)+(2*self.base_font.get_height()))
@@ -392,59 +447,120 @@ class Messages:
         self.running = True
         
         self.lines = []
-
-        all_messages = U.find_messages(user.nickname,reciever,user)
-        sept_messages = all_messages[0].split("¶")
-        for message in sept_messages:
-            self.split_text(message)
+        self.split_text(text)
         self.scrolled = len(self.lines)#-4
-        updater = threading.Thread(target=self.update,args=(user,))
-        updater.start()
-    def handle_event(self,event):
-        if event.type == pygame.KEYDOWN:
-            if self.active:
-                #up is -, down is +
-                if event.key == pygame.K_UP:
-                    if self.scrolled>0:
-                        self.y_offset+=self.base_font.get_height()
-                        self.scrolled-=1
-                elif event.key == pygame.K_DOWN:
-                    if self.scrolled<len(self.lines)-3:
-                        self.y_offset-=self.base_font.get_height()
-                        self.scrolled+=1
+
+    # Handle keyboard and mouse events for scrolling
+    def handle_event(self, event):
+        if event.type == pygame.KEYDOWN and self.active:
+            # Scroll up or down
+            if event.key == pygame.K_UP and self.scrolled > 0:
+                self.y_offset += self.base_font.get_height()
+                self.scrolled -= 1
+            elif event.key == pygame.K_DOWN and self.scrolled < len(self.lines) - 3:
+                self.y_offset -= self.base_font.get_height()
+                self.scrolled += 1
+
+        # Activate or deactivate on mouse click
         pos = pygame.mouse.get_pos()
-        if pygame.mouse.get_pressed()[0]==1:
-            if self.rect.collidepoint(pos):
-                self.active = True
-    def update(self,user):
-        while self.running:
-            text = user.new_text
-            if text != "":
-                user.new_text = ""
-                self.split_text(text)
-            sleep(0.1)  #sometimes doesn't pickup lines when there is no break
-    def split_text(self,text):
+        if pygame.mouse.get_pressed()[0] == 1:
+            self.active = self.rect.collidepoint(pos)
+
+    # Split input text into lines for display
+    def split_text(self, text):
+        self.lines = []
         words = text.split()
-        while len(words)>0:
+        while words:
             line_words = []
-            while len(words)>0:
+            while words:
                 line_words.append(words.pop(0))
-                fw, fh = self.base_font.size(' '.join(line_words+words[:1]))
-                if fw-self.rect.left>self.width:
+                fw, fh = self.base_font.size(' '.join(line_words + words[:1]))
+                if fw > self.width:
                     break
-            line = " ".join(line_words)
-            self.lines = self.lines +[line]
+            line = ' '.join(line_words)
+            self.lines.append(line)
+
+    # Draw the file content or message
     def draw(self,screen):
-        screen.blit(self.image,(self.rect.x, self.rect.y))
+        pygame.draw.rect(screen,(255,255,255),self.rect)
         fw,fh = self.base_font.size("line")
-        y_off = (max(0,((len(self.lines))*fh)))*-1 # -4
+        y_off = 0 #(max(0,((len(self.lines)-4)*fh)))*-1
         for line in self.lines:
-            ty = self.rect.y+10+self.y_offset+y_off
-            tx = self.rect.x +3
+            ty = self.rect.y + self.y_offset + y_off + 10
+            tx = self.rect.x + 3
             font_surface = self.base_font.render(line,True,self.text_col)
             line = font_surface.get_rect(topleft = (tx,ty))
             linetop = line.top
-            linbot = line.bottom
-            if linetop < self.rect.bottom and linbot >self.rect.top:
+            linebot = line.bottom
+            if linebot < self.rect.bottom and linetop > self.rect.top - 5:
                 screen.blit(font_surface,(tx,ty))
             y_off+=fh
+
+
+class slider():
+    def __init__(self,slidercolour1,slidercolour2,xpos,ypos,title,min,max,startpos,width,toggleheight,togglewidth):
+        self.title = title
+        self.xpos = xpos
+        self.ypos = ypos
+        self.slidercolour2 = slidercolour2
+        self.slidercolour1 = slidercolour1
+        self.max = max
+        self.min = min
+        self.sliderpos = startpos
+        self.width = width
+        self.togheight = toggleheight
+        self.togglewidth = togglewidth
+        self.sliderrect = pygame.Rect(0,0,0,0)
+        self.togglerect = pygame.Rect(0,0,0,0)
+        self.selected = False
+        self.otherselected = False
+
+        self.sliderrect = pygame.Rect(0,0,0,0)
+        self.togglerect = pygame.Rect(0,0,0,0)
+    def draw_slider(self,screen):
+
+        sheight = screen.get_height()
+        swidth = screen.get_width()
+        width = swidth*self.width/1000
+        xpos = (swidth*self.xpos/1000)-width/2
+        ypos = sheight*self.ypos/1000
+
+        pos = pygame.mouse.get_pos()
+        if pygame.mouse.get_pressed()[0] == 1:
+            if self.togglerect.collidepoint(pos):
+                if not self.otherselected:
+                    self.selected = True
+            else:
+                self.otherselected = True
+        else:
+            self.selected = False
+            self.otherselected = False
+
+        if self.selected:
+
+            spacing = width/(self.max-self.min)
+
+            self.sliderpos = ((pos[0]-xpos)/spacing)+self.min
+            self.sliderpos = round(self.sliderpos)
+            self.sliderpos = min(max(self.min,self.sliderpos),self.max)
+
+        toggleheight = self.togheight*sheight/1000
+        togglewidth = self.togglewidth*swidth/1000
+        toggleposx = ((self.sliderpos-self.min)*width/(self.max-self.min))+xpos-(togglewidth/2)
+        toggleposy = ypos - ((toggleheight/2) - 2)
+
+        font = pygame.font.Font(None,int(toggleheight))
+        toptext = (self.title + " - " + str(self.sliderpos))
+        text_surface1 = font.render(toptext,True,self.slidercolour2)
+        text_surface2 = font.render(self.title,True,self.slidercolour2)
+        titlewidth = text_surface2.get_width()
+        titleheight = text_surface1.get_height()
+        screen.blit(text_surface1, ((xpos+(width/2)-(titlewidth/2)), (self.togglerect.top-(2+titleheight))))
+
+        self.sliderrect = pygame.Rect(xpos,ypos,width,4)
+        self.togglerect = pygame.Rect(toggleposx,toggleposy,togglewidth,toggleheight)
+        
+        pygame.draw.rect(screen,self.slidercolour1, self.sliderrect)
+        pygame.draw.rect(screen,self.slidercolour2, self.togglerect)
+
+        return self.sliderpos
